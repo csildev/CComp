@@ -1,0 +1,16 @@
+[[package]]
+name = "cc"
+version = "0.1.0"
+dependencies = [
+ "parserlib 0.1.0",
+ "stdio 0.1.0",
+]
+
+[[package]]
+name = "parserlib"
+version = "0.1.0"
+
+[[package]]
+name = "stdio"
+version = "0.1.0"
+
