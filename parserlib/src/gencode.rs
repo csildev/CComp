@@ -17,6 +17,13 @@ pub enum Instruction {
     MulRR(Register,Register),
     DivRR(Register,Register),
     PopR(Register),
+    LtEqRR(Register,Register),
+    GtEqRR(Register,Register),
+    GtRR(Register,Register),
+    LtRR(Register,Register),
+    EqRR(Register,Register),
+    BoolOr(Register,Register),
+    BoolAnd(Register, Register),
 }
 
 #[derive(Debug)]
@@ -54,15 +61,125 @@ pub fn gencode_stmt(stmt: &parse::Statement) -> Vec<Instruction> {
             instrs.push(Instruction::PopR(Register::EAX));
             instrs.push(Instruction::Ret);
         }
+        _ => {}
     }
     instrs
 }
 
 pub fn gencode_expr(expr: &parse::Expression) -> Vec<Instruction> {
+    panic!("Expected something")
+}
+
+pub fn gencode_logorexpr(expr: &parse::LogOrExpression) -> Vec<Instruction> {
     let mut instrs = Vec::<Instruction>::new();
     match expr {
-        parse::Expression::Binary(x, y, z) => {
-            instrs.extend(gencode_expr(y));
+        parse::LogOrExpression::Binary(x, y, z) => {
+            instrs.extend(gencode_logorexpr(y));
+            instrs.extend(gencode_logandexp(z));
+            instrs.push(Instruction::PopR(Register::ECX));
+            instrs.push(Instruction::PopR(Register::EAX)); 
+            match x {
+                parse::BinOp::BoolOr=> {
+                   instrs.push(Instruction::BoolOr(Register::EAX, Register::ECX));
+                }
+                _ => panic!("Expected orop"),
+            }
+            instrs.push(Instruction::PushR(Register::EAX));
+        },
+        parse::LogOrExpression::LogAndExpression(x) => {
+            instrs.extend(gencode_logandexp(x));
+        }
+    }
+    instrs
+}
+
+pub fn gencode_logandexp(expr: &parse::LogAndExpression) -> Vec<Instruction> {
+    let mut instrs = Vec::<Instruction>::new();
+    match expr {
+        parse::LogAndExpression::Binary(x, y, z) => {
+            instrs.extend(gencode_logandexp(y));
+            instrs.extend(gencode_equalityexp(z));
+            instrs.push(Instruction::PopR(Register::ECX));
+            instrs.push(Instruction::PopR(Register::EAX)); 
+            match x {
+                parse::BinOp::BoolAnd => {
+                    instrs.push(Instruction::BoolAnd(Register::EAX, Register::ECX));
+                }
+                _ => panic!("Expected andop"),
+            }
+            instrs.push(Instruction::PushR(Register::EAX));
+        },
+        parse::LogAndExpression::EqualityExpression(x) => {
+            instrs.extend(gencode_equalityexp(x));
+        }
+    }
+    instrs
+}
+
+
+pub fn gencode_equalityexp(expr: &parse::EqualityExpression) -> Vec<Instruction> {
+    let mut instrs = Vec::<Instruction>::new();
+    match expr {
+        parse::EqualityExpression::Binary(x, y, z) => {
+            instrs.extend(gencode_equalityexp(y));
+            instrs.extend(gencode_relationalexp(z));
+            instrs.push(Instruction::PopR(Register::ECX));
+            instrs.push(Instruction::PopR(Register::EAX)); 
+            match x {
+                parse::BinOp::Eq=> {
+                   instrs.push(Instruction::EqRR(Register::EAX, Register::ECX));
+                }
+                _ => panic!("Expected relop"),
+            }
+            instrs.push(Instruction::PushR(Register::EAX));
+        },
+        parse::EqualityExpression::RelationalExpression(x) => {
+            instrs.extend(gencode_relationalexp(x));
+        }
+    }
+    instrs
+}
+
+
+pub fn gencode_relationalexp(expr: &parse::RelationalExpression) -> Vec<Instruction> {
+    let mut instrs = Vec::<Instruction>::new();
+    match expr {
+        parse::RelationalExpression::Binary(x, y, z) => {
+            instrs.extend(gencode_relationalexp(y));
+            instrs.extend(gencode_additiveexp(z));
+            instrs.push(Instruction::PopR(Register::ECX));
+            instrs.push(Instruction::PopR(Register::EAX)); 
+            match x {
+                parse::BinOp::LtE=> {
+                   instrs.push(Instruction::LtEqRR(Register::EAX, Register::ECX));
+                }
+                parse::BinOp::GtE => {
+                    instrs.push(Instruction::GtEqRR(Register::EAX, Register::ECX));
+                }
+                parse::BinOp::Gt => {
+                    instrs.push(Instruction::GtRR(Register::EAX, Register::ECX))
+                }
+                parse::BinOp::Lt => {
+                    instrs.push(Instruction::LtRR(Register::EAX, Register::ECX))
+                }
+
+                _ => panic!("Expected relop"),
+            }
+            instrs.push(Instruction::PushR(Register::EAX));
+        },
+        parse::RelationalExpression::AdditiveExpression(x) => {
+            instrs.extend(gencode_additiveexp(x));
+        }
+    }
+    instrs
+}
+
+
+pub fn gencode_additiveexp(expr: &parse::AdditiveExpression) -> Vec<Instruction> {
+    let mut instrs = Vec::<Instruction>::new();
+    match expr {
+        parse::AdditiveExpression::Binary(x, y, z) => {
+            instrs.extend(gencode_additiveexp(y));
             instrs.extend(gencode_term(z));
             instrs.push(Instruction::PopR(Register::ECX));
             instrs.push(Instruction::PopR(Register::EAX)); 
@@ -77,12 +194,13 @@ pub fn gencode_expr(expr: &parse::Expression) -> Vec<Instruction> {
             }
             instrs.push(Instruction::PushR(Register::EAX));
         },
-        parse::Expression::Term(x) => {
+        parse::AdditiveExpression::Term(x) => {
             instrs.extend(gencode_term(x));
         }
     }
     instrs
 }
+
 
 pub fn gencode_term(term: &parse::Term) -> Vec<Instruction> {
     let mut instrs = Vec::<Instruction>::new();
@@ -136,6 +254,9 @@ pub fn gencode_factor(factor: &parse::Factor) -> Vec<Instruction> {
         parse::Factor::Int(x) => {
             instrs.push(Instruction::MovRC(Register::EAX, x.clone()));
             instrs.push(Instruction::PushR(Register::EAX));
+        }
+        _ => {
+            panic!("Somehow we got somewhere we shouldnt")
         }
     }
     instrs

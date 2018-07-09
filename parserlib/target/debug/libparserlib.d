@@ -1,0 +1,1 @@
+/home/thomas/cc/parserlib/target/debug/libparserlib.rmeta: /home/thomas/cc/parserlib/src/amd64_asm.rs /home/thomas/cc/parserlib/src/gencode.rs /home/thomas/cc/parserlib/src/lex.rs /home/thomas/cc/parserlib/src/lib.rs /home/thomas/cc/parserlib/src/parse.rs

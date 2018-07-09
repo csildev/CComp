@@ -44,14 +44,46 @@ impl Function {
 pub enum Statement {
     NoStmt,
     Return(Expression),
+    Declare(String,Option<Expression>),
+    Expression(Expression)
 }
 
 #[derive(Debug)]
 pub enum Expression {
-    Binary(BinOp, Box<Expression>, Box<Term>),
-    Term(Term),
+    Assign(String,Box<Expression>),
+    LogOrExpression(LogOrExpression)
 }
 
+#[derive(Debug)]
+pub enum LogOrExpression {
+    Binary(BinOp, Box<LogOrExpression>, Box<LogAndExpression>),
+    LogAndExpression(LogAndExpression),
+}
+
+#[derive(Debug)]
+pub enum LogAndExpression {
+    Binary(BinOp, Box<LogAndExpression>, Box<EqualityExpression>),
+    EqualityExpression(EqualityExpression)
+}
+
+#[derive(Debug)]
+pub enum EqualityExpression {
+    Binary(BinOp, Box<EqualityExpression>, Box<RelationalExpression>),
+    RelationalExpression(RelationalExpression),
+}
+
+#[derive(Debug)]
+pub enum RelationalExpression {
+    Binary(BinOp, Box<RelationalExpression>, Box<AdditiveExpression>),
+    AdditiveExpression(AdditiveExpression),
+}
+
+#[derive(Debug)]
+pub enum AdditiveExpression {
+    Binary(BinOp, Box<AdditiveExpression>, Box<Term>),
+    Term(Term),
+}
+    
 #[derive(Debug)]
 pub enum Term {
     Binary(BinOp, Box<Term>, Box<Factor>),
@@ -64,6 +96,16 @@ pub enum BinOp {
     Minus,
     Times,
     Divide,
+    BoolOr,
+    BoolAnd,
+    RShift,
+    LShift,
+    Eq,
+    NotEq,
+    Lt,
+    LtE,
+    Gt,
+    GtE,
 }
 
 #[derive(Debug)]
@@ -71,6 +113,7 @@ pub enum Factor {
     Unary(UnOp, Box<Factor>),
     Wrapped(Box<Expression>),
     Int(String),
+    Var(String)
 }
 
 #[derive(Debug)]
@@ -141,27 +184,156 @@ pub fn parse_func(mut tokens: Vec<lex::Token>) -> (Function, Vec<lex::Token>) {
 }
 
 pub fn parse_stmt(mut tokens: Vec<lex::Token>) -> (Statement, Vec<lex::Token>) {
+    let stmt;
     match tokens.pop() {
         Some(Token::KWReturn) => {
-            let (exp, mut tokens) = parse_exp(tokens);
-            if let Some(Token::SemiColon) = tokens.pop() {
-            } else {
-                panic!("Expected semicolon to end statement");
-            }
-            (Statement::Return(exp), tokens)
+            let (exp, mut toks) = parse_exp(tokens);
+            tokens = toks;
+            stmt = Statement::Return(exp)
         }
-        Some(_) => {
-            panic!("Unexpected token encountered");
+        Some(Token::KWInt) => {
+            match tokens.pop() {
+                Some(Token::Identifier(var)) => {
+                    match tokens.pop(){
+                        Some(Token::Eq) => {
+                            let (exp, mut toks) = parse_exp(tokens);
+                            tokens = toks;
+                            stmt = Statement::Declare(var, Some(exp))
+                        }
+                        _ =>  {
+                           stmt = Statement::Declare(var, None) 
+                        }
+                    }
+                }
+                _ => panic!("Expected Identifier")
+            }
+        }
+        Some(Token::SemiColon) => {
+            tokens.push(Token::SemiColon);
+            stmt = Statement::NoStmt;
+        }
+        Some(x) => {
+            tokens.push(x);
+            let (expr, mut toks) = parse_exp(tokens);
+            tokens = toks;
+            stmt = Statement::Expression(expr);
         }
         None => {
             panic!("Expected keyword 'return'");
         }
     }
+    
+    println!("{:?}", stmt);
+    if let Some(Token::SemiColon) = tokens.pop() {
+    } else {
+        panic!("Expected semicolon to end statement");
+    }
+    return (stmt, tokens)
 }
 
-pub fn parse_exp(tokens: Vec<lex::Token>) -> (Expression, Vec<lex::Token>) {
+pub fn parse_exp(mut tokens: Vec<lex::Token>) -> (Expression, Vec<lex::Token>){
+    match tokens.pop() {
+        Some(Token::Identifier(x)) => {
+            if let Some(Token::Eq) = tokens.pop() {
+                let(expr, mut toks) = parse_exp(tokens);
+                return (Expression::Assign(x, Box::new(expr)), toks);
+            } else {
+               tokens.push(Token::Eq);
+               tokens.push(Token::Identifier(x));
+               let (expr, mut toks) = parse_logorexp(tokens);
+               (Expression::LogOrExpression(expr), toks)
+            }
+        }
+        _ => {
+            let (expr, mut toks) = parse_logorexp(tokens);
+            (Expression::LogOrExpression(expr), toks)
+        }
+    }
+}
+
+pub fn parse_logorexp(tokens: Vec<lex::Token>) -> (LogOrExpression, Vec<lex::Token>) {
+    let (tm, mut tokens) = parse_logandexp(tokens);
+    let mut term = LogOrExpression::LogAndExpression(tm);
+    let mut next = tokens
+        .pop()
+        .expect("Unexpected end of file in binary expression");
+    while next == Token::BoolOr {
+        tokens.push(next.clone());
+        let (op, toks) = parse_op(tokens);
+        let (next_term, toks) = parse_logandexp(toks);
+        tokens = toks;
+        term = LogOrExpression::Binary(op, Box::new(term), Box::new(next_term));
+        next = tokens
+            .pop()
+            .expect("Unexpected end of file when parsing expression");
+    }
+    tokens.push(next);
+    (term, tokens)
+}
+
+pub fn parse_logandexp(tokens: Vec<lex::Token>) -> (LogAndExpression, Vec<lex::Token>) {
+    let (eqe, mut tokens) = parse_equality_expression(tokens);
+    let mut term = LogAndExpression::EqualityExpression(eqe);
+    let mut next = tokens
+        .pop()
+        .expect("Unexpected end of file in binary expression");
+    while next == Token::BoolAnd {
+        tokens.push(next.clone());
+        let (op, toks) = parse_op(tokens);
+        let (next_term, toks) = parse_equality_expression(toks);
+        tokens = toks;
+        term = LogAndExpression::Binary(op, Box::new(term), Box::new(next_term));
+        next = tokens
+            .pop()
+            .expect("Unexpected end of file when parsing expression");
+    }
+    tokens.push(next);
+    (term, tokens)
+}
+
+pub fn parse_equality_expression(tokens: Vec<lex::Token>) -> (EqualityExpression, Vec<lex::Token>) {
+    let (relexp, mut tokens) = parse_relational_expression(tokens);
+    let mut term = EqualityExpression::RelationalExpression(relexp);
+    let mut next = tokens
+        .pop()
+        .expect("Unexpected end of file in binary expression");
+    while next == Token::NotEq || next == Token::EqEq {
+        tokens.push(next.clone());
+        let (op, toks) = parse_op(tokens);
+        let (next_term, toks) = parse_relational_expression(toks);
+        tokens = toks;
+        term = EqualityExpression::Binary(op, Box::new(term), Box::new(next_term));
+        next = tokens
+            .pop()
+            .expect("Unexpected end of file when parsing expression");
+    }
+    tokens.push(next);
+    (term, tokens)
+}
+
+pub fn parse_relational_expression(tokens: Vec<lex::Token>) -> (RelationalExpression, Vec<lex::Token>) {
+    let (tm, mut tokens) = parse_additive_expression(tokens);
+    let mut term = RelationalExpression::AdditiveExpression(tm);
+    let mut next = tokens
+        .pop()
+        .expect("Unexpected end of file in binary expression");
+    while next == Token::Lt || next == Token::LtE || next == Token::Gt || next == Token::GtE {
+        tokens.push(next.clone());
+        let (op, toks) = parse_op(tokens);
+        let (next_term, toks) = parse_additive_expression(toks);
+        tokens = toks;
+        term = RelationalExpression::Binary(op, Box::new(term), Box::new(next_term));
+        next = tokens
+            .pop()
+            .expect("Unexpected end of file when parsing expression");
+    }
+    tokens.push(next);
+    (term, tokens)
+}
+
+pub fn parse_additive_expression(tokens: Vec<lex::Token>) -> (AdditiveExpression, Vec<lex::Token>) {
     let (tm, mut tokens) = parse_term(tokens);
-    let mut term = Expression::Term(tm);
+    let mut term = AdditiveExpression::Term(tm);
     let mut next = tokens
         .pop()
         .expect("Unexpected end of file in binary expression");
@@ -170,7 +342,7 @@ pub fn parse_exp(tokens: Vec<lex::Token>) -> (Expression, Vec<lex::Token>) {
         let (op, toks) = parse_op(tokens);
         let (next_term, toks) = parse_term(toks);
         tokens = toks;
-        term = Expression::Binary(op, Box::new(term), Box::new(next_term));
+        term = AdditiveExpression::Binary(op, Box::new(term), Box::new(next_term));
         next = tokens
             .pop()
             .expect("Unexpected end of file when parsing expression");
@@ -201,6 +373,9 @@ pub fn parse_term(tokens: Vec<lex::Token>) -> (Term, Vec<lex::Token>) {
 
 pub fn parse_factor(mut tokens: Vec<lex::Token>) -> (Factor, Vec<lex::Token>) {
     match tokens.pop() {
+        Some(Token::Identifier(s)) => {
+            (Factor::Var(s), tokens)
+        },
         Some(Token::Integer(s)) => (Factor::Int(s), tokens),
         Some(Token::Minus) => {
             let (fact, toks) = parse_factor(tokens);
@@ -241,6 +416,14 @@ pub fn parse_op(mut tokens: Vec<lex::Token>) -> (BinOp, Vec<lex::Token>) {
         Token::Minus => (BinOp::Minus, tokens),
         Token::Times => (BinOp::Times, tokens),
         Token::Divide => (BinOp::Divide, tokens),
+        Token::Lt => (BinOp::Lt, tokens),
+        Token::Gt => (BinOp::Gt, tokens),
+        Token::GtE => (BinOp::GtE, tokens),
+        Token::LtE => (BinOp::LtE, tokens),
+        Token::EqEq => (BinOp::Eq, tokens),
+        Token::NotEq => (BinOp::NotEq, tokens),
+        Token::BoolOr => (BinOp::BoolOr, tokens),
+        Token::BoolAnd => (BinOp::BoolAnd, tokens),
         _ => panic!("unexpected token encountered, operator expected"),
     }
 }

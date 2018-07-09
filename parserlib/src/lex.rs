@@ -18,8 +18,12 @@ pub enum Token {
     BackSlash,
     Slash,
     Lt,
+    LtE,
     Gt,
+    GtE,
     Eq,
+    EqEq,
+    NotEq,
     Plus,
     Minus,
     Times,
@@ -30,6 +34,11 @@ pub enum Token {
     Hash,
     Complement,
     LogNegate,
+    BoolAnd,
+    BoolOr,
+    Or,
+    RShift,
+    LShift,
 }
 
 pub fn get_tokens(code: String) -> Vec<Token> {
@@ -71,12 +80,71 @@ fn get_token(code: &Vec<char>) -> Result<(Token, Vec<char>), String> {
         ']' => make_sc_token(Token::RSquare, code),
         '-' => make_sc_token(Token::Minus, code),
         '~' => make_sc_token(Token::Complement, code),
-        '!' => make_sc_token(Token::LogNegate, code),
         ';' => make_sc_token(Token::SemiColon, code),
         '+' => make_sc_token(Token::Plus, code),
         '*' => make_sc_token(Token::Times, code),
         '/' => make_sc_token(Token::Divide, code),
+        '&' | '|' | '!' | '<' | '>' | '=' => make_boolean_token(code),
         _ => Err("Incorrect Character encountered in parsing sequence".to_string()),
+    }
+}
+
+fn make_boolean_token(code: &Vec<char>) -> Result<(Token, Vec<char>), String>{
+    match code[0] {
+        '&' => {
+            return if code.len() > 1 && '&' == code[1] {
+                Ok((Token::BoolAnd, code[2..].to_vec()))
+            } else  {
+                Ok((Token::Ampersand, code[1..].to_vec()))
+            }
+        } 
+        '|' => {
+            return if code.len() > 1 && '|' == code[1] {
+                Ok((Token::BoolOr, code[2..].to_vec()))
+            } else {
+                Ok((Token::Or, code[1..].to_vec()))
+            }
+        }
+        '!' => {
+            return if code.len() > 1  && '=' == code[1] {
+                Ok((Token::NotEq, code[2..].to_vec()))
+            } else {
+                Ok((Token::LogNegate, code[1..].to_vec()))
+            }
+        }
+        '<' => {
+            if code.len() > 1 {
+                return match code[1] {
+                    '<' => Ok((Token::LShift, code[2..].to_vec())),
+                    '=' => Ok((Token::LtE, code[2..].to_vec())),
+                    _ => Ok((Token::Lt, code[1..].to_vec())),
+                }
+            } else {
+                return Ok((Token::Lt, code[1..].to_vec()))
+            }
+        }
+        '>' => {
+            if code.len() > 1 {
+                return match code[1] {
+                    '>' => Ok((Token::RShift, code[2..].to_vec())),
+                    '=' => Ok((Token::GtE, code[2..].to_vec())),
+                    _ => Ok((Token::Lt, code[1..].to_vec())),
+                }
+            } else {
+                return Ok((Token::Lt, code[1..].to_vec()))
+            }
+        }
+        '=' => {
+            if code.len() > 1 {
+                return match code[1] {
+                    '=' => Ok((Token::EqEq, code[2..].to_vec())),
+                    _ => Ok((Token::Eq, code[1..].to_vec())),
+                }
+            } else {
+                return Ok((Token::Eq, code[1..].to_vec()))
+            }
+        }
+        _ =>  Err("Somehow a random character got past the function guards".to_string())
     }
 }
 
