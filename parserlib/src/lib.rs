@@ -1,4 +1,4 @@
-pub mod asmgen;
+pub mod amd64_asm;
 pub mod gencode;
 pub mod lex;
 pub mod parse;
