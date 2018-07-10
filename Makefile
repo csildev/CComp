@@ -10,8 +10,11 @@ clean:
 	cargo clean -p stdio
 	cargo clean
 
-git: clean
+git: clean readme
 	git add .
 	@read -p "Enter commit message:" message;\
 	git commit -m "$$message";
 	git push
+
+readme:
+	@echo "#Current Project Line Count\n $(shell git ls-files | xargs cat | wc -l)" > README.md
