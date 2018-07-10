@@ -2,5 +2,7 @@
 name = "parserlib"
 version = "0.1.0"
 authors = ["thomas"]
+description = "A compiler for a subset of c with pluggable components"
+license = "bsd"
 
 [dependencies]
