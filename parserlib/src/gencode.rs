@@ -28,7 +28,7 @@ pub enum Instruction {
     EqRR(Register,Register),
     BoolOr(Register,Register),
     BoolAnd(Register, Register),
-
+    If(Register, String),
 }
 
 #[derive(Debug)]
@@ -59,7 +59,7 @@ pub fn gencode_func(func: &parse::Function) -> Vec<Instruction> {
     instrs.push(Instruction::PushR(Register::EBP));
     instrs.push(Instruction::MovRR(Register::EBP, Register::ESP));
     for stmt in func.get_stmts().iter() {
-        let (stmt, map, idx) = gencode_stmt(stmt, vmap, sindex);
+        let (stmt, map, idx) = gencode_blockitem(stmt, vmap, sindex);
         instrs.extend(stmt);
         vmap = map;
         sindex = idx;
@@ -67,7 +67,35 @@ pub fn gencode_func(func: &parse::Function) -> Vec<Instruction> {
    instrs
 }
 
-pub fn gencode_stmt(stmt: &parse::Statement, mut vmap: HashMap<String,u64>, stack_index: u64) -> (Vec<Instruction>, HashMap<String, u64>, u64) {
+pub fn gencode_blockitem(stmt: &parse::BlockItem, mut vmap: HashMap<String, u64>, mut stack_index: u64) -> (Vec<Instruction>, HashMap<String,u64>, u64) {
+    let mut instrs = Vec::<Instruction>::new();
+    match stmt {
+        parse::BlockItem::Declaration(x, Some(y)) => {
+            if vmap.contains_key(x){
+                panic!("variable was redefined");
+            }
+            instrs.extend(gencode_expr(y,&vmap));
+            vmap.insert(x.to_string(),stack_index);
+            instrs.push(Instruction::PopR(Register::EAX));
+            instrs.push(Instruction::PushR(Register::EAX));
+            stack_index = stack_index + 4 ;
+        }
+        parse::BlockItem::Declaration(x, None) => {
+            if vmap.contains_key(x){
+                panic!("variable redefined");
+            }
+            vmap.insert(x.to_string(), stack_index);
+            instrs.push(Instruction::MovRC(Register::EAX,"0".to_string()));
+            instrs.push(Instruction::MovRS(Register::EAX, stack_index));
+        }
+        parse::BlockItem::Statement(x) => {
+            instrs.extend(gencode_stmt(x, &vmap));
+        }
+    }
+    (instrs, vmap, stack_index)
+}
+
+pub fn gencode_stmt(stmt: &parse::Statement, vmap: &HashMap<String,u64>) -> Vec<Instruction> {
     let mut instrs = Vec::<Instruction>::new();
     match stmt {
         parse::Statement::NoStmt => {}
@@ -78,28 +106,26 @@ pub fn gencode_stmt(stmt: &parse::Statement, mut vmap: HashMap<String,u64>, stac
             instrs.push(Instruction::PopR(Register::EBP));
             instrs.push(Instruction::Ret);
         }
-        parse::Statement::Declare(x, Some(y)) => {
-            if vmap.contains_key(x){
-                panic!("variable was redefined");
-            }
-            instrs.extend(gencode_expr(y,&vmap));
-            vmap.insert(x.to_string(),stack_index);
-            instrs.push(Instruction::PopR(Register::EAX));
-            instrs.push(Instruction::PushR(Register::EAX));
+        parse::Statement::If(x,y,Some(z)) => {
+            instrs.extend(gencode_expr(x, &vmap));
+            let iflabel = get_unique_label(".iflocallabel".to_string());
+            instrs.push(Instruction::If(Register::EAX,iflabel.clone()));
+            instrs.extend(gencode_stmt(y, &vmap));
+            instrs.push(Instruction::Label(iflabel));
+            instrs.extend(gencode_stmt(z, &vmap));
         }
-        parse::Statement::Declare(x, None) => {
-            if vmap.contains_key(x){
-                panic!("variable redefined");
-            }
-            vmap.insert(x.to_string(), stack_index);
-            instrs.push(Instruction::MovRC(Register::EAX,"0".to_string()));
-            instrs.push(Instruction::MovRS(Register::EAX, stack_index));
+        parse::Statement::If(x,y,None) => {
+            instrs.extend(gencode_expr(x, &vmap));
+            let iflabel = get_unique_label("iflocallabel".to_string());
+            instrs.push(Instruction::If(Register::EAX,iflabel.clone()));
+            instrs.extend(gencode_stmt(y, &vmap));
+            instrs.push(Instruction::Label(iflabel));
         }
-        parse::Statement::Expression(x) => {
+       parse::Statement::Expression(x) => {
             instrs.extend(gencode_expr(x,&vmap));
         }
     }
-    (instrs, vmap, stack_index+4)
+    instrs
 }
 
 pub fn gencode_expr(expr: &parse::Expression, vmap: &HashMap<String, u64>) -> Vec<Instruction> {
@@ -111,8 +137,27 @@ pub fn gencode_expr(expr: &parse::Expression, vmap: &HashMap<String, u64>) -> Ve
             instrs.push(Instruction::PopR(Register::EAX));
             instrs.push(Instruction::MovRS(Register::EAX,var_offset.clone()));
         }
-        parse::Expression::LogOrExpression(x) => {
+        parse::Expression::ConditionalExpression(x) => {
+            instrs.extend(gencode_condexpr(x, vmap));
+        }
+    }
+    instrs
+}
+
+pub fn gencode_condexpr(expr: &parse::ConditionalExpression, vmap: &HashMap<String, u64>) -> Vec<Instruction> {
+    let mut instrs = Vec::<Instruction>::new();
+    match expr {
+        parse::ConditionalExpression::LogicalOrExpression(x) => {instrs.extend(gencode_logorexpr(x, vmap));}
+        parse::ConditionalExpression::Conditional(x,y,z) => {
             instrs.extend(gencode_logorexpr(x, vmap));
+            let locallabel = get_unique_label(".localcond".to_string());
+            let post_label = get_unique_label(".postcond".to_string());
+            instrs.push(Instruction::If(Register::EAX, locallabel.clone()));
+            instrs.extend(gencode_expr(y, vmap));
+            instrs.push(Instruction::Jmp(post_label.clone()));
+            instrs.push(Instruction::Label(locallabel));
+            instrs.extend(gencode_expr(z, vmap));
+            instrs.push(Instruction::Label(post_label));
         }
     }
     instrs
@@ -308,9 +353,19 @@ pub fn gencode_factor(factor: &parse::Factor, vmap: &HashMap<String, u64>) -> Ve
             instrs.push(Instruction::MovSR(offset.clone(),Register::EAX));
             instrs.push(Instruction::PushR(Register::EAX));
         }
-        _ => {
-            panic!("Somehow we got somewhere we shouldnt")
-        }
     }
     instrs
 }
+
+static mut labelend: u64 = 0;
+pub fn get_unique_label(ins: String) -> String {
+    unsafe {
+    labelend = labelend+1;
+    let mut iflabel:String = ins;
+    let second: String = labelend.to_string();
+    iflabel.push_str(&second);
+    iflabel
+    }
+}
+
+

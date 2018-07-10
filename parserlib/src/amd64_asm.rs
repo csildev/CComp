@@ -2,6 +2,10 @@ use gencode;
 
 pub fn translate_instruction(i: &gencode::Instruction) -> String {
     match i {
+        gencode::Instruction::If(r1, s) => format!(
+            "cmp {}, 0\nje {}",
+            translate_register(r1),
+            s),
         gencode::Instruction::MovSR(r1, r2) => format!(
             "mov {}, [rbp - {}]",
             translate_register(r2),r1),
@@ -85,7 +89,8 @@ pub fn translate_instruction(i: &gencode::Instruction) -> String {
             translate_small_register(r1),
             translate_register(r1),
             translate_register(r2)),
-        _ => panic!("unknown expression")
+            _ => panic!("unknown register"),
+        
     }
 }
 

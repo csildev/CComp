@@ -39,6 +39,9 @@ pub enum Token {
     Or,
     RShift,
     LShift,
+    KWIf,
+    KWElse,
+    Question
 }
 
 pub fn get_tokens(code: String) -> Vec<Token> {
@@ -84,6 +87,8 @@ fn get_token(code: &Vec<char>) -> Result<(Token, Vec<char>), String> {
         '+' => make_sc_token(Token::Plus, code),
         '*' => make_sc_token(Token::Times, code),
         '/' => make_sc_token(Token::Divide, code),
+        '?' => make_sc_token(Token::Question, code),
+        ':' => make_sc_token(Token::FullColon, code),
         '&' | '|' | '!' | '<' | '>' | '=' => make_boolean_token(code),
         _ => Err("Incorrect Character encountered in parsing sequence".to_string()),
     }
@@ -168,6 +173,8 @@ fn get_identifier(code: &Vec<char>) -> Result<(Token, Vec<char>), String> {
     match ident.as_ref() {
         "int" => Ok((Token::KWInt, code[length..].to_vec())),
         "return" => Ok((Token::KWReturn, code[length..].to_vec())),
+        "if" => Ok((Token::KWIf, code[length..].to_vec())),
+        "else" => Ok((Token::KWElse, code[length..].to_vec())),
         _ => Ok((Token::Identifier(ident), code[length..].to_vec())),
     }
 }
