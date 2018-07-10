@@ -2,6 +2,18 @@ use gencode;
 
 pub fn translate_instruction(i: &gencode::Instruction) -> String {
     match i {
+        gencode::Instruction::MovSR(r1, r2) => format!(
+            "mov {}, [rbp - {}]",
+            translate_register(r2),r1),
+        gencode::Instruction::MovRS(r1, r2) => format!(
+            "mov [rbp - {}], {}",
+            r2, translate_register(r1),
+            ),
+        gencode::Instruction::MovRR(r1, r2) => format!(
+            "mov {}, {}",
+            translate_register(r1),
+            translate_register(r2),
+            ),
         gencode::Instruction::EqRR(r1, r2) => format!(
             "cmp {}, {}\n mov {}, 0\n sete {}",
             translate_register(r1),
@@ -73,6 +85,7 @@ pub fn translate_instruction(i: &gencode::Instruction) -> String {
             translate_small_register(r1),
             translate_register(r1),
             translate_register(r2)),
+        _ => panic!("unknown expression")
     }
 }
 
@@ -82,6 +95,8 @@ pub fn translate_register(r: &gencode::Register) -> String {
         gencode::Register::EBX => "rbx",
         gencode::Register::ECX => "rcx",
         gencode::Register::EDX => "rdx",
+        gencode::Register::ESP => "rsp",
+        gencode::Register::EBP => "rbp",
     };
     r.to_string()
 }
@@ -91,6 +106,7 @@ pub fn translate_small_register(r: &gencode::Register) -> String {
         gencode::Register::EBX => "bl",
         gencode::Register::ECX => "cl",
         gencode::Register::EDX => "dl",
+        _ => panic!("non-8bit register")
     };
     r.to_string()
 }

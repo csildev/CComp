@@ -42,7 +42,7 @@ pub enum Token {
 }
 
 pub fn get_tokens(code: String) -> Vec<Token> {
-    get_tokens_vec(code.chars().collect())
+    get_tokens_vec(code.replace('\n', "").chars().collect())
 }
 
 pub fn get_tokens_vec(mut code: Vec<char>) -> Vec<Token> {

@@ -194,13 +194,15 @@ pub fn parse_stmt(mut tokens: Vec<lex::Token>) -> (Statement, Vec<lex::Token>) {
         Some(Token::KWInt) => {
             match tokens.pop() {
                 Some(Token::Identifier(var)) => {
-                    match tokens.pop(){
+                    let next_tok = tokens.pop();
+                    match next_tok{
                         Some(Token::Eq) => {
                             let (exp, mut toks) = parse_exp(tokens);
                             tokens = toks;
                             stmt = Statement::Declare(var, Some(exp))
                         }
                         _ =>  {
+                            tokens.push(next_tok.expect("must have").clone());
                            stmt = Statement::Declare(var, None) 
                         }
                     }
@@ -223,7 +225,6 @@ pub fn parse_stmt(mut tokens: Vec<lex::Token>) -> (Statement, Vec<lex::Token>) {
         }
     }
     
-    println!("{:?}", stmt);
     if let Some(Token::SemiColon) = tokens.pop() {
     } else {
         panic!("Expected semicolon to end statement");
@@ -234,17 +235,20 @@ pub fn parse_stmt(mut tokens: Vec<lex::Token>) -> (Statement, Vec<lex::Token>) {
 pub fn parse_exp(mut tokens: Vec<lex::Token>) -> (Expression, Vec<lex::Token>){
     match tokens.pop() {
         Some(Token::Identifier(x)) => {
-            if let Some(Token::Eq) = tokens.pop() {
+            let next = tokens.pop();
+            if let Some(Token::Eq) = next {
                 let(expr, mut toks) = parse_exp(tokens);
                 return (Expression::Assign(x, Box::new(expr)), toks);
             } else {
-               tokens.push(Token::Eq);
+               tokens.push(next.expect("Must have token, we couldn't be here without one"));
                tokens.push(Token::Identifier(x));
                let (expr, mut toks) = parse_logorexp(tokens);
                (Expression::LogOrExpression(expr), toks)
             }
         }
-        _ => {
+        None => { panic!("Reached end of tokens inside expresssion"); }
+        Some(x) => {
+            tokens.push(x);
             let (expr, mut toks) = parse_logorexp(tokens);
             (Expression::LogOrExpression(expr), toks)
         }
@@ -372,14 +376,14 @@ pub fn parse_term(tokens: Vec<lex::Token>) -> (Term, Vec<lex::Token>) {
 }
 
 pub fn parse_factor(mut tokens: Vec<lex::Token>) -> (Factor, Vec<lex::Token>) {
-    match tokens.pop() {
+    let next = tokens.pop();
+    match next {
         Some(Token::Identifier(s)) => {
             (Factor::Var(s), tokens)
         },
         Some(Token::Integer(s)) => (Factor::Int(s), tokens),
         Some(Token::Minus) => {
             let (fact, toks) = parse_factor(tokens);
-
             (Factor::Unary(UnOp::Negate, Box::new(fact)), toks)
         }
         Some(Token::LogNegate) => {
