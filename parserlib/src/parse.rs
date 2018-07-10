@@ -1,6 +1,6 @@
 use lex;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Program {
     funcs: Vec<Function>,
 }
@@ -14,7 +14,7 @@ impl Program {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Function {
     name: Option<String>,
     stmts: Vec<BlockItem>,
@@ -40,69 +40,85 @@ impl Function {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Statement {
-    NoStmt,
     Return(Expression),
-    If(Expression, Box<Statement>,Option<Box<Statement>>),
-    Expression(Expression)
+    If(Expression, Box<Statement>, Option<Box<Statement>>),
+    For(
+        Option<Expression>,
+        Box<Expression>,
+        Option<Box<Expression>>,
+        Box<Statement>,
+    ),
+    ForDecl(
+        Box<BlockItem>,
+        Box<Expression>,
+        Option<Box<Expression>>,
+        Box<Statement>,
+    ),
+    While(Expression, Box<Statement>),
+    Do(Box<Statement>, Expression),
+    Break,
+    Continue,
+    Expression(Option<Expression>),
+    Compound(Vec<BlockItem>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum BlockItem {
     Statement(Statement),
     Declaration(String, Option<Expression>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Expression {
-    Assign(String,Box<Expression>),
-    ConditionalExpression(ConditionalExpression)
+    Assign(String, Box<Expression>),
+    ConditionalExpression(ConditionalExpression),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ConditionalExpression {
     LogicalOrExpression(LogOrExpression),
-    Conditional(Box<LogOrExpression>, Box<Expression>, Box<Expression>)
+    Conditional(Box<LogOrExpression>, Box<Expression>, Box<Expression>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum LogOrExpression {
     Binary(BinOp, Box<LogOrExpression>, Box<LogAndExpression>),
     LogAndExpression(LogAndExpression),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum LogAndExpression {
     Binary(BinOp, Box<LogAndExpression>, Box<EqualityExpression>),
-    EqualityExpression(EqualityExpression)
+    EqualityExpression(EqualityExpression),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum EqualityExpression {
     Binary(BinOp, Box<EqualityExpression>, Box<RelationalExpression>),
     RelationalExpression(RelationalExpression),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum RelationalExpression {
     Binary(BinOp, Box<RelationalExpression>, Box<AdditiveExpression>),
     AdditiveExpression(AdditiveExpression),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum AdditiveExpression {
     Binary(BinOp, Box<AdditiveExpression>, Box<Term>),
     Term(Term),
 }
-    
-#[derive(Debug)]
+
+#[derive(Debug, Clone)]
 pub enum Term {
     Binary(BinOp, Box<Term>, Box<Factor>),
     Factor(Factor),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum BinOp {
     Plus,
     Minus,
@@ -120,7 +136,7 @@ pub enum BinOp {
     GtE,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Factor {
     Unary(UnOp, Box<Factor>),
     Wrapped(Box<Expression>),
@@ -128,7 +144,7 @@ pub enum Factor {
     Var(String),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum UnOp {
     Negate,
     LogNegate,
@@ -198,28 +214,25 @@ pub fn parse_func(mut tokens: Vec<lex::Token>) -> (Function, Vec<lex::Token>) {
 pub fn parse_blockitem(mut tokens: Vec<lex::Token>) -> (BlockItem, Vec<lex::Token>) {
     let stmt;
     match tokens.pop() {
-        Some(Token::KWInt) => {
-            match tokens.pop() {
-                Some(Token::Identifier(var)) => {
-                    let next_tok = tokens.pop();
-                    match next_tok{
-                        Some(Token::Eq) => {
-                            let (exp, mut toks) = parse_exp(tokens);
-                            tokens = toks;
-                            stmt = BlockItem::Declaration(var, Some(exp));
-                                (stmt, tokens)
-                        }
-                        _ =>  {
-                            tokens.push(next_tok.expect("must have").clone());
-                           stmt = BlockItem::Declaration(var, None);
-                           (stmt, tokens)
-
-                        }
+        Some(Token::KWInt) => match tokens.pop() {
+            Some(Token::Identifier(var)) => {
+                let next_tok = tokens.pop();
+                match next_tok {
+                    Some(Token::Eq) => {
+                        let (exp, mut toks) = parse_exp(tokens);
+                        tokens = toks;
+                        stmt = BlockItem::Declaration(var, Some(exp));
+                        (stmt, tokens)
+                    }
+                    _ => {
+                        tokens.push(next_tok.expect("must have").clone());
+                        stmt = BlockItem::Declaration(var, None);
+                        (stmt, tokens)
                     }
                 }
-                _ => panic!("Expected Identifier")
             }
-        }
+            _ => panic!("Expected Identifier"),
+        },
         Some(x) => {
             tokens.push(x);
             let (bkitem, toks) = parse_stmt(tokens);
@@ -232,25 +245,30 @@ pub fn parse_blockitem(mut tokens: Vec<lex::Token>) -> (BlockItem, Vec<lex::Toke
 }
 
 pub fn parse_stmt(mut tokens: Vec<lex::Token>) -> (Statement, Vec<lex::Token>) {
-    let  stmt;
+    let stmt;
     match tokens.pop() {
         Some(Token::KWIf) => {
-            if let Some(Token::LParen) = tokens.pop(){}
-            else {
+            if let Some(Token::LParen) = tokens.pop() {
+            } else {
                 panic!("Expected parenthesis to begin condition");
             }
-            let ( rel_exp, mut toks) = parse_exp(tokens);
+            let (rel_exp, mut toks) = parse_exp(tokens);
             tokens = toks;
-            if let Some(Token::RParen) = tokens.pop(){}
-            else {
+            if let Some(Token::RParen) = tokens.pop() {
+            } else {
                 panic!("Expected parenthesis to end condition");
             }
             let (smt, mut toks) = parse_stmt(tokens);
             tokens = toks;
             let else_stmt = match tokens.pop() {
-                Some(Token::KWElse) => { None},
-                Some(x) => { tokens.push(x); None }
-                None => { panic!("Expected token found EOF"); }
+                Some(Token::KWElse) => None,
+                Some(x) => {
+                    tokens.push(x);
+                    None
+                }
+                None => {
+                    panic!("Expected token found EOF");
+                }
             };
             stmt = Statement::If(rel_exp, Box::new(smt), else_stmt);
             return (stmt, tokens);
@@ -262,41 +280,132 @@ pub fn parse_stmt(mut tokens: Vec<lex::Token>) -> (Statement, Vec<lex::Token>) {
         }
         Some(Token::SemiColon) => {
             tokens.push(Token::SemiColon);
-            stmt = Statement::NoStmt;
+            stmt = Statement::Expression(None);
+        }
+        Some(Token::LBracket) => {
+            let mut blockitems = Vec::new();
+            loop {
+                match tokens.pop() {
+                    Some(Token::RBracket) => break,
+                    Some(x) => {
+                        tokens.push(x);
+                        let (mut blkitem, mut toks) = parse_blockitem(tokens);
+                        tokens = toks;
+                        blockitems.push(blkitem);
+                    }
+                    None => panic!("Expected end of block, not end of file"),
+                }
+            }
+            return (Statement::Compound(blockitems), tokens);
+        }
+        Some(Token::KWFor) => {
+            if let Some(Token::LParen) = tokens.pop() {
+            } else {
+                panic!("Expected open parenthesis to begin for")
+            }
+            let nt = tokens.pop();
+            if let Some(Token::KWInt) = nt {
+                tokens.push(nt.expect("Must have token"));
+                let (ex, toks) = parse_blockitem(tokens);
+                tokens = toks;
+                let exp = ex;
+                if let Some(Token::SemiColon) = tokens.pop() {
+                } else {
+                    panic!("Expected semicolon between parses")
+                }
+                let (s_exp, toks) = parse_exp(tokens);
+                tokens = toks;
+                if let Some(Token::SemiColon) = tokens.pop() {
+                } else {
+                    panic!("expected semicolon")
+                }
+                let (t_exp, toks) = parse_exp(tokens);
+                tokens = toks;
+                if let Some(Token::RParen) = tokens.pop() {
+                } else {
+                    panic!("Expected closing parenthesis");
+                }
+                let (stmt, toks) = parse_stmt(tokens);
+                tokens = toks;
+                return (
+                    Statement::ForDecl(
+                        Box::new(exp),
+                        Box::new(s_exp),
+                        Some(Box::new(t_exp)),
+                        Box::new(stmt),
+                    ),
+                    tokens,
+                );
+
+            } else {
+                tokens.push(nt.expect("Must have token"));
+                let (ex, toks) = parse_exp(tokens);
+                tokens = toks;
+                let exp = ex;
+                if let Some(Token::SemiColon) = tokens.pop() {
+                } else {
+                    panic!("Expected semicolon between parses")
+                }
+                let (s_exp, toks) = parse_exp(tokens);
+                tokens = toks;
+                if let Some(Token::SemiColon) = tokens.pop() {
+                } else {
+                    panic!("expected semicolon")
+                }
+                let (t_exp, toks) = parse_exp(tokens);
+                tokens = toks;
+                if let Some(Token::RParen) = tokens.pop() {
+                } else {
+                    panic!("Expected closing parenthesis");
+                }
+                let (stmt, toks) = parse_stmt(tokens);
+                tokens = toks;
+                return (
+                    Statement::For(
+                        Some(exp),
+                        Box::new(s_exp),
+                        Some(Box::new(t_exp)),
+                        Box::new(stmt),
+                    ),
+                    tokens,
+                );
+            }
         }
         Some(x) => {
             tokens.push(x);
             let (expr, mut toks) = parse_exp(tokens);
             tokens = toks;
-            stmt = Statement::Expression(expr);
+            stmt = Statement::Expression(Some(expr));
         }
         None => {
             panic!("Expected keyword 'return'");
         }
     }
-    
+
     if let Some(Token::SemiColon) = tokens.pop() {
     } else {
         panic!("Expected semicolon to end statement");
     }
-    return (stmt, tokens)
+    return (stmt, tokens);
 }
 
-pub fn parse_exp(mut tokens: Vec<lex::Token>) -> (Expression, Vec<lex::Token>){
+pub fn parse_exp(mut tokens: Vec<lex::Token>) -> (Expression, Vec<lex::Token>) {
     match tokens.pop() {
         Some(Token::Identifier(x)) => {
             let next = tokens.pop();
             if let Some(Token::Eq) = next {
-                let(expr, mut toks) = parse_exp(tokens);
+                let (expr, mut toks) = parse_exp(tokens);
                 return (Expression::Assign(x, Box::new(expr)), toks);
             } else {
-               tokens.push(next.expect("Must have token, we couldn't be here without one"));
-               tokens.push(Token::Identifier(x));
-               let (expr, mut toks) = parse_conditionalexp(tokens);
-               (Expression::ConditionalExpression(expr), toks)
+                tokens.push(next.expect("Must have token, we couldn't be here without one"));
+                tokens.push(Token::Identifier(x));
+                let (expr, mut toks) = parse_conditionalexp(tokens);
+                (Expression::ConditionalExpression(expr), toks)
             }
         }
-        None => { panic!("Reached end of tokens inside expresssion"); }
+        None => {
+            panic!("Reached end of tokens inside expresssion");
+        }
         Some(x) => {
             tokens.push(x);
             let (expr, mut toks) = parse_conditionalexp(tokens);
@@ -305,7 +414,9 @@ pub fn parse_exp(mut tokens: Vec<lex::Token>) -> (Expression, Vec<lex::Token>){
     }
 }
 
-pub fn parse_conditionalexp(mut tokens: Vec<lex::Token>) -> (ConditionalExpression, Vec<lex::Token>) {
+pub fn parse_conditionalexp(
+    mut tokens: Vec<lex::Token>,
+) -> (ConditionalExpression, Vec<lex::Token>) {
     match tokens.pop() {
         Some(x) => {
             tokens.push(x);
@@ -315,12 +426,21 @@ pub fn parse_conditionalexp(mut tokens: Vec<lex::Token>) -> (ConditionalExpressi
                 Some(Token::Question) => {
                     let (s_exp, mut toks) = parse_exp(tokens);
                     tokens = toks;
-                    if let Some(Token::FullColon) = tokens.pop() {}
-                    else { panic!("Expected token, found eof"); }
+                    if let Some(Token::FullColon) = tokens.pop() {
+                    } else {
+                        panic!("Expected token, found eof");
+                    }
                     let (e_exp, mut toks) = parse_exp(tokens);
                     tokens = toks;
-                    (ConditionalExpression::Conditional(Box::new(l_exp), Box::new(s_exp), Box::new(e_exp)), tokens)
-                },
+                    (
+                        ConditionalExpression::Conditional(
+                            Box::new(l_exp),
+                            Box::new(s_exp),
+                            Box::new(e_exp),
+                        ),
+                        tokens,
+                    )
+                }
                 Some(x) => {
                     tokens.push(x);
                     (ConditionalExpression::LogicalOrExpression(l_exp), tokens)
@@ -330,7 +450,7 @@ pub fn parse_conditionalexp(mut tokens: Vec<lex::Token>) -> (ConditionalExpressi
                 }
             }
         }
-        None => panic!("Unexpected end of file when matching token")
+        None => panic!("Unexpected end of file when matching token"),
     }
 }
 
@@ -394,7 +514,9 @@ pub fn parse_equality_expression(tokens: Vec<lex::Token>) -> (EqualityExpression
     (term, tokens)
 }
 
-pub fn parse_relational_expression(tokens: Vec<lex::Token>) -> (RelationalExpression, Vec<lex::Token>) {
+pub fn parse_relational_expression(
+    tokens: Vec<lex::Token>,
+) -> (RelationalExpression, Vec<lex::Token>) {
     let (tm, mut tokens) = parse_additive_expression(tokens);
     let mut term = RelationalExpression::AdditiveExpression(tm);
     let mut next = tokens
@@ -457,9 +579,7 @@ pub fn parse_term(tokens: Vec<lex::Token>) -> (Term, Vec<lex::Token>) {
 pub fn parse_factor(mut tokens: Vec<lex::Token>) -> (Factor, Vec<lex::Token>) {
     let next = tokens.pop();
     match next {
-        Some(Token::Identifier(s)) => {
-            (Factor::Var(s), tokens)
-        },
+        Some(Token::Identifier(s)) => (Factor::Var(s), tokens),
         Some(Token::Integer(s)) => (Factor::Int(s), tokens),
         Some(Token::Minus) => {
             let (fact, toks) = parse_factor(tokens);
@@ -475,7 +595,7 @@ pub fn parse_factor(mut tokens: Vec<lex::Token>) -> (Factor, Vec<lex::Token>) {
         }
         Some(Token::LParen) => {
             let (expr, mut toks) = parse_exp(tokens);
-            if let Some(Token::RParen) = toks.pop(){
+            if let Some(Token::RParen) = toks.pop() {
             } else {
                 panic!("Expected closing parenthesis");
             }

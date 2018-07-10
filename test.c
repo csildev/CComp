@@ -1,6 +1,7 @@
 int main() {
-	if(0)
-		return 2;
-	else 
-		return 3;
+	int a = 1;
+	int b = 5;
+	for(a=0; a>0; a=a+1)
+		b = b + 1;
+	return b;
 }

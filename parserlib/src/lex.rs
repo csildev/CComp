@@ -41,7 +41,12 @@ pub enum Token {
     LShift,
     KWIf,
     KWElse,
-    Question
+    KWFor,
+    KWDo,
+    KWContinue,
+    KWBreak,
+    KWWhile,
+    Question,
 }
 
 pub fn get_tokens(code: String) -> Vec<Token> {
@@ -94,15 +99,15 @@ fn get_token(code: &Vec<char>) -> Result<(Token, Vec<char>), String> {
     }
 }
 
-fn make_boolean_token(code: &Vec<char>) -> Result<(Token, Vec<char>), String>{
+fn make_boolean_token(code: &Vec<char>) -> Result<(Token, Vec<char>), String> {
     match code[0] {
         '&' => {
             return if code.len() > 1 && '&' == code[1] {
                 Ok((Token::BoolAnd, code[2..].to_vec()))
-            } else  {
+            } else {
                 Ok((Token::Ampersand, code[1..].to_vec()))
             }
-        } 
+        }
         '|' => {
             return if code.len() > 1 && '|' == code[1] {
                 Ok((Token::BoolOr, code[2..].to_vec()))
@@ -111,7 +116,7 @@ fn make_boolean_token(code: &Vec<char>) -> Result<(Token, Vec<char>), String>{
             }
         }
         '!' => {
-            return if code.len() > 1  && '=' == code[1] {
+            return if code.len() > 1 && '=' == code[1] {
                 Ok((Token::NotEq, code[2..].to_vec()))
             } else {
                 Ok((Token::LogNegate, code[1..].to_vec()))
@@ -123,9 +128,9 @@ fn make_boolean_token(code: &Vec<char>) -> Result<(Token, Vec<char>), String>{
                     '<' => Ok((Token::LShift, code[2..].to_vec())),
                     '=' => Ok((Token::LtE, code[2..].to_vec())),
                     _ => Ok((Token::Lt, code[1..].to_vec())),
-                }
+                };
             } else {
-                return Ok((Token::Lt, code[1..].to_vec()))
+                return Ok((Token::Lt, code[1..].to_vec()));
             }
         }
         '>' => {
@@ -134,9 +139,9 @@ fn make_boolean_token(code: &Vec<char>) -> Result<(Token, Vec<char>), String>{
                     '>' => Ok((Token::RShift, code[2..].to_vec())),
                     '=' => Ok((Token::GtE, code[2..].to_vec())),
                     _ => Ok((Token::Lt, code[1..].to_vec())),
-                }
+                };
             } else {
-                return Ok((Token::Lt, code[1..].to_vec()))
+                return Ok((Token::Lt, code[1..].to_vec()));
             }
         }
         '=' => {
@@ -144,12 +149,12 @@ fn make_boolean_token(code: &Vec<char>) -> Result<(Token, Vec<char>), String>{
                 return match code[1] {
                     '=' => Ok((Token::EqEq, code[2..].to_vec())),
                     _ => Ok((Token::Eq, code[1..].to_vec())),
-                }
+                };
             } else {
-                return Ok((Token::Eq, code[1..].to_vec()))
+                return Ok((Token::Eq, code[1..].to_vec()));
             }
         }
-        _ =>  Err("Somehow a random character got past the function guards".to_string())
+        _ => Err("Somehow a random character got past the function guards".to_string()),
     }
 }
 
@@ -175,6 +180,11 @@ fn get_identifier(code: &Vec<char>) -> Result<(Token, Vec<char>), String> {
         "return" => Ok((Token::KWReturn, code[length..].to_vec())),
         "if" => Ok((Token::KWIf, code[length..].to_vec())),
         "else" => Ok((Token::KWElse, code[length..].to_vec())),
+        "for" => Ok((Token::KWFor, code[length..].to_vec())),
+        "while" => Ok((Token::KWWhile, code[length..].to_vec())),
+        "do" => Ok((Token::KWDo, code[length..].to_vec())),
+        "break" => Ok((Token::KWBreak, code[length..].to_vec())),
+        "continue" => Ok((Token::KWContinue, code[length..].to_vec())),
         _ => Ok((Token::Identifier(ident), code[length..].to_vec())),
     }
 }
