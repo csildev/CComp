@@ -17,4 +17,4 @@ git: clean readme
 	git push
 
 readme:
-	@echo "# Current Project Line Count: \n $(shell git ls-files | xargs cat | wc -l)" > README.md
+	@echo "# Current Project Line Count: $(shell git ls-files | xargs cat | wc -l)" > README.md
